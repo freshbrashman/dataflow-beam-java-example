@@ -17,6 +17,10 @@
  */
 package org.apache.beam.examples;
 
+import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.LambdaLogger;
+import com.amazonaws.services.lambda.runtime.events.S3Event;
+import com.amazonaws.services.s3.event.S3EventNotification.S3EventNotificationRecord;
 import org.apache.beam.examples.common.ExampleUtils;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.TextIO;
@@ -36,6 +40,7 @@ import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.SimpleFunction;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
+
 
 public class WordCount {
 
@@ -146,5 +151,15 @@ public class WordCount {
         PipelineOptionsFactory.fromArgs(args).withValidation().as(WordCountOptions.class);
 
     runWordCount(options);
+  }
+
+  // https://qiita.com/Keisuke69/items/23ce6652f212a7418fac
+  public static String handler(S3Event event, Context context){
+    LambdaLogger lambdaLogger = context.getLogger();
+    S3EventNotificationRecord record = event.getRecords().get(0);
+    lambdaLogger.log(record.getEventName()); //イベント名
+    lambdaLogger.log(record.getS3().getBucket().getName()); //バケット名
+    lambdaLogger.log(record.getS3().getObject().getKey()); //オブジェクトのキー（オブジェクト名）
+    return record.getS3().getObject().getKey();
   }
 }
