@@ -21,9 +21,13 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.events.S3Event;
 import com.amazonaws.services.s3.event.S3EventNotification.S3EventNotificationRecord;
+import com.google.api.services.bigquery.model.TableFieldSchema;
+import com.google.api.services.bigquery.model.TableRow;
+import com.google.api.services.bigquery.model.TableSchema;
 import org.apache.beam.examples.common.ExampleUtils;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.TextIO;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.metrics.Counter;
 import org.apache.beam.sdk.metrics.Distribution;
 import org.apache.beam.sdk.metrics.Metrics;
@@ -40,6 +44,9 @@ import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.SimpleFunction;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
+import org.json.JSONObject;
+
+import java.util.Arrays;
 
 
 public class WordCount {
@@ -131,17 +138,65 @@ public class WordCount {
     String getOutput();
 
     void setOutput(String value);
+
+    @Required
+    String getTableName();
+    void setTableName(String value);
+
   }
 
   static void runWordCount(WordCountOptions options) {
     Pipeline p = Pipeline.create(options);
 
+    TableFieldSchema [] fields = {
+            new TableFieldSchema().setName("col1").setType("STRING"),
+            new TableFieldSchema().setName("col2").setType("INTEGER"),
+            new TableFieldSchema().setName("col3").setType("INTEGER"),
+            new TableFieldSchema().setName("col4").setType("INTEGER")
+    };
+    TableSchema tableSchema = new TableSchema().setFields(Arrays.asList(fields));
+
+
     // Concepts #2 and #3: Our pipeline applies the composite CountWords transform, and passes the
     // static FormatAsTextFn() to the ParDo transform.
-    p.apply("ReadLines", TextIO.read().from(options.getInputFile()))
-        .apply(new CountWords())
-        .apply(MapElements.via(new FormatAsTextFn()))
-        .apply("WriteCounts", TextIO.write().to(options.getOutput()));
+    p
+      .apply("ReadLines", TextIO.read().from(options.getInputFile()))
+      .apply(ParDo.of(new DoFn<String, TableRow>() {
+        @ProcessElement
+        public void processElement(@Element String element, OutputReceiver<TableRow> receiver) {
+          JSONObject elementJson = new JSONObject(element);
+          String [] columns = {"col1", "col2", "col3", "col4"};
+          TableRow tableRow = new TableRow();
+
+          Arrays.stream(columns).forEach((column) -> {
+            switch(column) {
+              case "col1":
+                try{
+                  String valStr = elementJson.getString(column);
+                  tableRow.put(column, valStr);
+                }catch(Exception e) {
+                }
+                break;
+              default:
+                try{
+                  int valInt = elementJson.getInt(column);
+                  tableRow.put(column, valInt);
+                }catch(Exception e) {
+                }
+            }
+          });
+
+          receiver.output(tableRow);
+        }
+      }))
+      .apply("WriteBigQuery",
+              BigQueryIO.writeTableRows()
+                      .to("test02." + options.getTableName())
+                      .withSchema(tableSchema)
+                      .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
+                      .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE)
+                      );
+//      .apply("WriteCounts", TextIO.write().to(options.getOutput()));
 
     p.run();
 //    p.run().waitUntilFinish();  // 同期実行の場合
@@ -163,12 +218,18 @@ public class WordCount {
       lambdaLogger.log(record.getS3().getBucket().getName()); //バケット名
       lambdaLogger.log(record.getS3().getObject().getKey()); //オブジェクトのキー（オブジェクト名）
 
+      String uniqueKey = record.getS3().getObject().getKey().replaceAll("[\\/\\.\\(\\)\\-]", "");
+
       String [] args = {
               "--runner=DataflowRunner",
               "--project=sylvan-overview-145200",
-              String.format("--gcpTempLocation=gs://yterui-dataflow-test/dataflow-apache-example/gcpTempLocation/%s/", record.getS3().getObject().getKey()),
-              "--inputFile=gs://apache-beam-samples/shakespeare/*",
-              String.format("--output=gs://yterui-dataflow-test/dataflow-apache-example/output/%s/", record.getS3().getObject().getKey())
+              String.format("--gcpTempLocation=gs://yterui-dataflow-test/dataflow-apache-example/gcpTempLocation/%s/", uniqueKey),
+              String.format("--tempLocation=gs://yterui-dataflow-test/dataflow-apache-example/tempLocation/%s/", uniqueKey),
+              String.format("--stagingLocation=gs://yterui-dataflow-test/dataflow-apache-example/staging/%s/", uniqueKey),
+//              "--inputFile=gs://apache-beam-samples/shakespeare/*",
+              "--inputFile=gs://yterui-function-test/bq_load_test/bq_load_test_3.json.gz",
+              "--tableName=" + uniqueKey,
+              String.format("--output=gs://yterui-dataflow-test/dataflow-apache-example/output/%s/", uniqueKey)
       };
 
       main(args);
