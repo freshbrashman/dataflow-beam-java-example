@@ -143,7 +143,8 @@ public class WordCount {
         .apply(MapElements.via(new FormatAsTextFn()))
         .apply("WriteCounts", TextIO.write().to(options.getOutput()));
 
-    p.run().waitUntilFinish();
+    p.run();
+//    p.run().waitUntilFinish();  // 同期実行の場合
   }
 
   public static void main(String[] args) {
@@ -156,10 +157,23 @@ public class WordCount {
   // https://qiita.com/Keisuke69/items/23ce6652f212a7418fac
   public static String handler(S3Event event, Context context){
     LambdaLogger lambdaLogger = context.getLogger();
-    S3EventNotificationRecord record = event.getRecords().get(0);
-    lambdaLogger.log(record.getEventName()); //イベント名
-    lambdaLogger.log(record.getS3().getBucket().getName()); //バケット名
-    lambdaLogger.log(record.getS3().getObject().getKey()); //オブジェクトのキー（オブジェクト名）
-    return record.getS3().getObject().getKey();
+
+    event.getRecords().stream().parallel().forEach((record) -> {
+      lambdaLogger.log(record.getEventName()); //イベント名
+      lambdaLogger.log(record.getS3().getBucket().getName()); //バケット名
+      lambdaLogger.log(record.getS3().getObject().getKey()); //オブジェクトのキー（オブジェクト名）
+
+      String [] args = {
+              "--runner=DataflowRunner",
+              "--project=sylvan-overview-145200",
+              String.format("--gcpTempLocation=gs://yterui-dataflow-test/dataflow-apache-example/gcpTempLocation/%s/", record.getS3().getObject().getKey()),
+              "--inputFile=gs://apache-beam-samples/shakespeare/*",
+              String.format("--output=gs://yterui-dataflow-test/dataflow-apache-example/output/%s/", record.getS3().getObject().getKey())
+      };
+
+      main(args);
+    });
+
+    return "Success!!";
   }
 }
