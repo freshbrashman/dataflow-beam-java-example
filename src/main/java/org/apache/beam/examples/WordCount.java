@@ -45,11 +45,15 @@ import org.apache.beam.sdk.transforms.SimpleFunction;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 
 
 public class WordCount {
+
+  private static final Logger LOG = LoggerFactory.getLogger(WordCount.class);
 
   /**
    * Concept #2: You can make your pipeline assembly code less verbose by defining your DoFns
@@ -183,6 +187,16 @@ public class WordCount {
                   tableRow.put(column, valInt);
                 }catch(Exception e) {
                 }
+            }
+            // 意味もなく負荷をかける。これでOOMが発生するかの検証(１処理が遅いだけでOOMが起こるという現象があったための検証)
+            // →結果これではOOMにはならなかった。当たり前といえば当たり前
+            JSONObject dummy = new JSONObject(element);
+            for(int i=0; i<1000; i++) {
+                LOG.info(dummy.toString());
+                JSONObject dummy2 = new JSONObject(element);
+                dummy2.put("element", dummy);
+                dummy = dummy2;
+                LOG.info(dummy.toString());
             }
           });
 
