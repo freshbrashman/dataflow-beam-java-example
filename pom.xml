@@ -293,7 +293,7 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- for aws lambda -->
+<!-- for aws lambda
     <dependency>
       <groupId>com.amazonaws</groupId>
       <artifactId>aws-lambda-java-core</artifactId>
@@ -304,6 +304,22 @@
       <artifactId>aws-lambda-java-events</artifactId>
       <version>1.0.0</version>
     </dependency>
+ -->
+
+    <!-- for AWS S3 TextIO -->
+    <!-- https://mvnrepository.com/artifact/org.apache.beam/beam-sdks-java-io-amazon-web-services -->
+    <dependency>
+      <groupId>org.apache.beam</groupId>
+      <artifactId>beam-sdks-java-io-amazon-web-services</artifactId>
+      <version>${beam.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+      <version>4.5.6</version>
+    </dependency>
+
+
 
   </dependencies>
 </project>

@@ -17,16 +17,17 @@
  */
 package org.apache.beam.examples;
 
-import com.amazonaws.services.lambda.runtime.Context;
-import com.amazonaws.services.lambda.runtime.LambdaLogger;
-import com.amazonaws.services.lambda.runtime.events.S3Event;
-import com.amazonaws.services.s3.event.S3EventNotification.S3EventNotificationRecord;
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
+import com.amazonaws.auth.BasicAWSCredentials;
 import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.api.services.bigquery.model.TableSchema;
 import org.apache.beam.examples.common.ExampleUtils;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.TextIO;
+import org.apache.beam.sdk.io.aws.options.AwsOptions;
+import org.apache.beam.sdk.io.aws.options.S3Options;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.metrics.Counter;
 import org.apache.beam.sdk.metrics.Distribution;
@@ -49,6 +50,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
+import java.util.stream.Stream;
 
 
 public class WordCount {
@@ -124,7 +126,7 @@ public class WordCount {
    *
    * <p>Inherits standard configuration options.
    */
-  public interface WordCountOptions extends PipelineOptions {
+  public interface WordCountOptions extends AwsOptions {
 
     /**
      * By default, this example reads from a public dataset containing the text of King Lear. Set
@@ -188,10 +190,9 @@ public class WordCount {
                 }catch(Exception e) {
                 }
             }
-            // 意味もなく負荷をかける。これでOOMが発生するかの検証(１処理が遅いだけでOOMが起こるという現象があったための検証)
-            // →結果これではOOMにはならなかった。当たり前といえば当たり前
+            // 意味もなく負荷をかける
             JSONObject dummy = new JSONObject(element);
-            for(int i=0; i<1000; i++) {
+            for(int i=0; i<10; i++) {
                 LOG.info(dummy.toString());
                 JSONObject dummy2 = new JSONObject(element);
                 dummy2.put("element", dummy);
@@ -217,12 +218,35 @@ public class WordCount {
   }
 
   public static void main(String[] args) {
+
+    String uniqueKey = "testxxxxxxxxyyyyxzz";
+
+    String [] args2 = {
+            "--runner=DataflowRunner",
+            "--project=sylvan-overview-145200",
+            String.format("--gcpTempLocation=gs://yterui-dataflow-test/dataflow-apache-example/gcpTempLocation/%s/", uniqueKey),
+            String.format("--tempLocation=gs://yterui-dataflow-test/dataflow-apache-example/tempLocation/%s/", uniqueKey),
+            String.format("--stagingLocation=gs://yterui-dataflow-test/dataflow-apache-example/staging/%s/", uniqueKey),
+//              "--inputFile=gs://apache-beam-samples/shakespeare/*",
+//            "--inputFile=gs://yterui-function-test/bq_load_test/bq_load_test_3.json.gz",
+            "--inputFile=s3://yterui-test-bucket-01/dataflow-input/*",
+            "--tableName=" + uniqueKey,
+            String.format("--output=gs://yterui-dataflow-test/dataflow-apache-example/output/%s/", uniqueKey),
+            "--awsRegion=us-east-2",
+            "--network=vpc-test",
+            "--subnetwork=subnet-test"
+    };
+
     WordCountOptions options =
-        PipelineOptionsFactory.fromArgs(args).withValidation().as(WordCountOptions.class);
+        PipelineOptionsFactory.fromArgs(args2).withValidation().as(WordCountOptions.class);
+
+    options.setAwsCredentialsProvider(new AWSStaticCredentialsProvider(new BasicAWSCredentials(System.getenv("accesskey"), System.getenv("secretkey"))));
+
 
     runWordCount(options);
   }
 
+/*
   // https://qiita.com/Keisuke69/items/23ce6652f212a7418fac
   public static String handler(S3Event event, Context context){
     LambdaLogger lambdaLogger = context.getLogger();
@@ -251,4 +275,5 @@ public class WordCount {
 
     return "Success!!";
   }
+*/
 }
